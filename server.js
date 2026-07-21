@@ -2,7 +2,6 @@ const express = require('express');
 const AWS = require('aws-sdk');
 const path = require('path');
 const cors = require('cors');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -11,11 +10,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-AWS.config.update({
-  accessKeyId: process.env.AWS_ACCESS_KEY || '',
-  secretAccessKey: process.env.AWS_SECRET_KEY || '',
-  region: process.env.AWS_REGION || 'us-east-1'
-});
+AWS.config.update({ region: 'us-east-1' });
 
 const ec2 = new AWS.EC2();
 const cloudwatch = new AWS.CloudWatch();
