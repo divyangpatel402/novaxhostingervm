@@ -2,7 +2,7 @@ const express = require('express');
 const AWS = require('aws-sdk');
 const path = require('path');
 const cors = require('cors');
-const http = require('http');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -10,6 +10,10 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+AWS.config.update({
+  region: process.env.AWS_REGION || 'us-east-1'
+});
 
 app.get('/api/instances', async (req, res) => {
   try {
@@ -106,26 +110,9 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-function getRegion() {
-  return new Promise((resolve) => {
-    const req = http.get('http://169.254.169.254/latest/meta-data/placement/region', (res) => {
-      let d = '';
-      res.on('data', c => d += c);
-      res.on('end', () => resolve(d.trim() || 'us-east-1'));
-    });
-    req.on('error', () => resolve('us-east-1'));
-    req.setTimeout(3000, () => { req.destroy(); resolve('us-east-1'); });
-  });
-}
+const ec2 = new AWS.EC2();
+const cloudwatch = new AWS.CloudWatch();
 
-let ec2, cloudwatch;
-
-getRegion().then(region => {
-  AWS.config.update({ region });
-  ec2 = new AWS.EC2();
-  cloudwatch = new AWS.CloudWatch();
-  console.log('AWS Region:', region);
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`NOVA X Panel on http://0.0.0.0:${PORT}`);
-  });
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`NOVA X Premium Control Panel on http://0.0.0.0:${PORT}`);
 });
