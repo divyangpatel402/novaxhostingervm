@@ -2,6 +2,7 @@ const express = require('express');
 const AWS = require('aws-sdk');
 const path = require('path');
 const cors = require('cors');
+const http = require('http');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -9,86 +10,6 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
-AWS.config.update({ region: 'us-east-1' });
-
-const ec2 = new AWS.EC2();
-const cloudwatch = new AWS.CloudWatch();
-
-async function getInstanceStatus(instanceId) {
-  try {
-    const data = await ec2.describeInstances({ InstanceIds: [instanceId] }).promise();
-    const instance = data.Reservations[0].Instances[0];
-    return {
-      InstanceId: instance.InstanceId,
-      State: instance.State.Name,
-      InstanceType: instance.InstanceType,
-      PrivateIp: instance.PrivateIpAddress || 'N/A',
-      PublicIp: instance.PublicIpAddress || 'N/A',
-      LaunchTime: instance.LaunchTime,
-      VpcId: instance.VpcId || 'N/A',
-      SubnetId: instance.SubnetId || 'N/A',
-      Tags: instance.Tags || []
-    };
-  } catch (err) {
-    throw new Error(err.message);
-  }
-}
-
-async function getInstanceMetrics(instanceId) {
-  try {
-    const endTime = new Date();
-    const startTime = new Date(endTime.getTime() - 300000);
-
-    const cpuParams = {
-      Namespace: 'AWS/EC2',
-      MetricName: 'CPUUtilization',
-      Dimensions: [{ Name: 'InstanceId', Value: instanceId }],
-      StartTime: startTime,
-      EndTime: endTime,
-      Period: 300,
-      Statistics: ['Average']
-    };
-
-    const networkInParams = {
-      Namespace: 'AWS/EC2',
-      MetricName: 'NetworkIn',
-      Dimensions: [{ Name: 'InstanceId', Value: instanceId }],
-      StartTime: startTime,
-      EndTime: endTime,
-      Period: 300,
-      Statistics: ['Average']
-    };
-
-    const networkOutParams = {
-      Namespace: 'AWS/EC2',
-      MetricName: 'NetworkOut',
-      Dimensions: [{ Name: 'InstanceId', Value: instanceId }],
-      StartTime: startTime,
-      EndTime: endTime,
-      Period: 300,
-      Statistics: ['Average']
-    };
-
-    const [cpuData, netInData, netOutData] = await Promise.all([
-      cloudwatch.getMetricStatistics(cpuParams).promise(),
-      cloudwatch.getMetricStatistics(networkInParams).promise(),
-      cloudwatch.getMetricStatistics(networkOutParams).promise()
-    ]);
-
-    const cpu = cpuData.Datapoints.length > 0 ? cpuData.Datapoints[0].Average : 0;
-    const netIn = netInData.Datapoints.length > 0 ? netInData.Datapoints[0].Average : 0;
-    const netOut = netOutData.Datapoints.length > 0 ? netOutData.Datapoints[0].Average : 0;
-
-    return {
-      CPUUtilization: Math.round(cpu * 100) / 100,
-      NetworkIn: Math.round(netIn * 100) / 100,
-      NetworkOut: Math.round(netOut * 100) / 100
-    };
-  } catch (err) {
-    return { CPUUtilization: 0, NetworkIn: 0, NetworkOut: 0, error: err.message };
-  }
-}
 
 app.get('/api/instances', async (req, res) => {
   try {
@@ -116,9 +37,39 @@ app.get('/api/instances', async (req, res) => {
 
 app.get('/api/instance/:id', async (req, res) => {
   try {
-    const status = await getInstanceStatus(req.params.id);
-    const metrics = await getInstanceMetrics(req.params.id);
-    res.json({ success: true, ...status, metrics });
+    const data = await ec2.describeInstances({ InstanceIds: [req.params.id] }).promise();
+    const inst = data.Reservations[0].Instances[0];
+
+    const endTime = new Date();
+    const startTime = new Date(endTime.getTime() - 300000);
+    const metricParams = (metric) => ({
+      Namespace: 'AWS/EC2', MetricName: metric,
+      Dimensions: [{ Name: 'InstanceId', Value: req.params.id }],
+      StartTime: startTime, EndTime: endTime, Period: 300, Statistics: ['Average']
+    });
+
+    const [cpu, netIn, netOut] = await Promise.all([
+      cloudwatch.getMetricStatistics(metricParams('CPUUtilization')).promise(),
+      cloudwatch.getMetricStatistics(metricParams('NetworkIn')).promise(),
+      cloudwatch.getMetricStatistics(metricParams('NetworkOut')).promise()
+    ]);
+
+    res.json({
+      success: true,
+      InstanceId: inst.InstanceId,
+      State: inst.State.Name,
+      InstanceType: inst.InstanceType,
+      PrivateIp: inst.PrivateIpAddress || 'N/A',
+      PublicIp: inst.PublicIpAddress || 'N/A',
+      LaunchTime: inst.LaunchTime,
+      VpcId: inst.VpcId || 'N/A',
+      SubnetId: inst.SubnetId || 'N/A',
+      metrics: {
+        CPUUtilization: cpu.Datapoints.length ? Math.round(cpu.Datapoints[0].Average * 100) / 100 : 0,
+        NetworkIn: netIn.Datapoints.length ? Math.round(netIn.Datapoints[0].Average * 100) / 100 : 0,
+        NetworkOut: netOut.Datapoints.length ? Math.round(netOut.Datapoints[0].Average * 100) / 100 : 0
+      }
+    });
   } catch (err) {
     res.json({ success: false, error: err.message });
   }
@@ -155,7 +106,26 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`NOVA X Premium Control Panel running on http://0.0.0.0:${PORT}`);
-  console.log(`Local: http://localhost:${PORT}`);
+function getRegion() {
+  return new Promise((resolve) => {
+    const req = http.get('http://169.254.169.254/latest/meta-data/placement/region', (res) => {
+      let d = '';
+      res.on('data', c => d += c);
+      res.on('end', () => resolve(d.trim() || 'us-east-1'));
+    });
+    req.on('error', () => resolve('us-east-1'));
+    req.setTimeout(3000, () => { req.destroy(); resolve('us-east-1'); });
+  });
+}
+
+let ec2, cloudwatch;
+
+getRegion().then(region => {
+  AWS.config.update({ region });
+  ec2 = new AWS.EC2();
+  cloudwatch = new AWS.CloudWatch();
+  console.log('AWS Region:', region);
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`NOVA X Panel on http://0.0.0.0:${PORT}`);
+  });
 });
