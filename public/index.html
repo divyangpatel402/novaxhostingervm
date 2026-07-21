@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NOVA X - Premium VPS Control Panel</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+  <div class="cursor"></div>
+  <div class="cursor-follower"></div>
+
+  <div class="particles" id="particles"></div>
+
+  <nav class="navbar">
+    <div class="nav-brand">
+      <div class="logo">
+        <svg viewBox="0 0 40 40" width="40" height="40">
+          <defs>
+            <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#00f5ff;stop-opacity:1" />
+              <stop offset="100%" style="stop-color:#7b2ff7;stop-opacity:1" />
+            </linearGradient>
+          </defs>
+          <rect x="4" y="4" width="32" height="32" rx="8" fill="url(#logoGrad)" opacity="0.15"/>
+          <path d="M12 28V12h4l4 8 4-8h4v16h-4V18l-4 8-4-8v10z" fill="url(#logoGrad)"/>
+        </svg>
+        <div class="brand-text">
+          <span class="brand-name">NOVA <em>X</em></span>
+          <span class="brand-sub">Premium Control Panel</span>
+        </div>
+      </div>
+    </div>
+    <div class="nav-status">
+      <div class="status-indicator" id="navStatus"></div>
+      <span id="navStatusText">Checking...</span>
+    </div>
+  </nav>
+
+  <main class="main-content">
+    <div class="dashboard-header">
+      <div class="header-left">
+        <h1 class="glow-text">VPS Management <span class="highlight">Dashboard</span></h1>
+        <p class="header-subtitle">Manage your virtual machines in real-time</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-refresh" onclick="loadInstances()">
+          <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+    </div>
+
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-card">
+        <div class="stat-icon total">
+          <i class="fas fa-server"></i>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="totalInstances">0</span>
+          <span class="stat-label">Total Instances</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon running">
+          <i class="fas fa-play-circle"></i>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="runningInstances">0</span>
+          <span class="stat-label">Running</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon stopped">
+          <i class="fas fa-stop-circle"></i>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="stoppedInstances">0</span>
+          <span class="stat-label">Stopped</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon pending">
+          <i class="fas fa-clock"></i>
+        </div>
+        <div class="stat-info">
+          <span class="stat-value" id="pendingInstances">0</span>
+          <span class="stat-label">Pending</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="instance-list-container">
+      <div class="section-header">
+        <h2><i class="fas fa-cubes"></i> Your Instances</h2>
+        <div class="search-box">
+          <i class="fas fa-search"></i>
+          <input type="text" id="searchInput" placeholder="Search instances..." oninput="filterInstances()">
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table class="instance-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Instance ID</th>
+              <th>Type</th>
+              <th>State</th>
+              <th>Public IP</th>
+              <th>Private IP</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="instanceTableBody">
+            <tr>
+              <td colspan="7" class="loading-cell">
+                <div class="loader"></div>
+                <span>Loading instances...</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2><i class="fas fa-server"></i> <span id="modalTitle">Instance Details</span></h2>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="detail-grid">
+          <div class="detail-section">
+            <h3><i class="fas fa-info-circle"></i> General Information</h3>
+            <div class="detail-row"><span>Instance ID</span><span id="detId">-</span></div>
+            <div class="detail-row"><span>Name</span><span id="detName">-</span></div>
+            <div class="detail-row"><span>Type</span><span id="detType">-</span></div>
+            <div class="detail-row"><span>State</span><span id="detState">-</span></div>
+            <div class="detail-row"><span>Launch Time</span><span id="detLaunch">-</span></div>
+          </div>
+          <div class="detail-section">
+            <h3><i class="fas fa-network-wired"></i> Networking</h3>
+            <div class="detail-row"><span>Public IP</span><span id="detPublicIp">-</span></div>
+            <div class="detail-row"><span>Private IP</span><span id="detPrivateIp">-</span></div>
+            <div class="detail-row"><span>VPC ID</span><span id="detVpcId">-</span></div>
+            <div class="detail-row"><span>Subnet ID</span><span id="detSubnetId">-</span></div>
+          </div>
+          <div class="detail-section full-width">
+            <h3><i class="fas fa-chart-line"></i> Live Metrics (Last 5 min)</h3>
+            <div class="metrics-grid">
+              <div class="metric-box">
+                <div class="metric-icon cpu"><i class="fas fa-microchip"></i></div>
+                <div class="metric-content">
+                  <span class="metric-label">CPU Usage</span>
+                  <span class="metric-value" id="detCpu">0%</span>
+                </div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-icon network"><i class="fas fa-arrow-down"></i></div>
+                <div class="metric-content">
+                  <span class="metric-label">Network In</span>
+                  <span class="metric-value" id="detNetIn">0 Bytes/s</span>
+                </div>
+              </div>
+              <div class="metric-box">
+                <div class="metric-icon network"><i class="fas fa-arrow-up"></i></div>
+                <div class="metric-content">
+                  <span class="metric-label">Network Out</span>
+                  <span class="metric-value" id="detNetOut">0 Bytes/s</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-actions" id="modalActions">
+          <button class="btn btn-start" onclick="instanceAction('start')"><i class="fas fa-play"></i> Start</button>
+          <button class="btn btn-stop" onclick="instanceAction('stop')"><i class="fas fa-stop"></i> Stop</button>
+          <button class="btn btn-reboot" onclick="instanceAction('reboot')"><i class="fas fa-sync-alt"></i> Reboot</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
